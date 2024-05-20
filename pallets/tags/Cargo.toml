@@ -1,6 +1,6 @@
 [package]
-name = "pallet-template"
-description = "FRAME pallet template for defining custom runtime logic."
+name = "pallet-tags"
+description = "tag management pallet"
 version = "0.0.0"
 license = "MIT-0"
 authors.workspace = true

@@ -93,6 +93,15 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type Something<T> = StorageValue<_, u32>;
 
+	#[pallet::storage]
+	pub type TagMap<T> = StorageMap<
+		Hasher = Blake2_128Concat,
+		Key = u8,
+		Value = u8,
+		QueryKind = ValueQuery
+	>;
+
+
 	/// Events that functions in this pallet can emit.
 	///
 	/// Events are a simple means of indicating to the outside world (such as dApps, chain explorers
@@ -152,7 +161,7 @@ pub mod pallet {
 		/// error if it isn't. Learn more about origins here: <https://docs.substrate.io/build/origins/>
 		#[pallet::call_index(0)]
 		#[pallet::weight(T::WeightInfo::do_something())]
-		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
+		pub fn create_tag(origin: OriginFor<T>, something: u32) -> DispatchResult {
 			// Check that the extrinsic was signed and get the signer.
 			let who = ensure_signed(origin)?;
 
