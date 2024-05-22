@@ -139,10 +139,19 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// A user has successfully set a new value.
-		SomethingStored {
-			/// The new value set.
-			something: u32,
-			/// The account who set the new value.
+		TagCreated {
+			/// The tag id.
+			index: u64,
+			/// The account who created the tag.
+			who: T::AccountId,
+			/// The deposit reserved for the tag.
+			deposit: BalanceOf<T>,
+		},
+		/// A user destroyed a previously created tag.
+		TagDestroyed {
+			/// The tag id.
+			index: u64,
+			/// The account that owned and destroyed the tag
 			who: T::AccountId,
 		},
 	}
@@ -159,8 +168,12 @@ pub mod pallet {
 	pub enum Error<T> {
 		/// The value retrieved was `None` as no value was previously set.
 		NoneValue,
-		/// There was an attempt to increment the value in storage over `u32::MAX`.
+		/// There are more tags than possible to store on chain (u64 id limit).
 		StorageOverflow,
+		/// The tag with the given ID doesn't exist in the network.
+		InvalidTag,
+		/// An user tried to modify a tag that it didn't create.
+		NotAllowed,
 	}
 
 	/// The pallet's dispatchable functions ([`Call`]s).
@@ -196,6 +209,7 @@ pub mod pallet {
 			T::Currency::reserve(&who, deposit)?;
 
 			// By this point all checks should have been done (enough balance, no duplication, etc)
+			// TODO: There's a check still missing atp: whether there's space for more tags.
 
 			// Get the next available index and update the counter
 			let index = match TagIndex::<T>::get() {
@@ -215,7 +229,12 @@ pub mod pallet {
 				},
 			};
 
-			TagMap::<T>::insert(index, (name, Some(who), deposit));
+			TagMap::<T>::insert(index, (name, Some(who.clone()), deposit));
+
+			// Emit the corresponding event.
+			Self::deposit_event(Event::TagCreated {
+				index, who, deposit
+			});
 
 			// Return a successful `DispatchResult`
 			Ok(())
@@ -232,17 +251,20 @@ pub mod pallet {
 			// Check that the extrinsic was signed and get the signer.
 			let who = ensure_signed(origin)?;
 
-			let (_name, creator_opt, deposit) = TagMap::<T>::try_get(tag_index)?;
+			let (_name, creator_opt, deposit) = TagMap::<T>::try_get(tag_index).map_err(|()|Error::<T>::InvalidTag)?;
 
 			if creator_opt.as_ref() != Some(&who) {
-				// TODO: Is this the correct error?
-				return Err(DispatchError::RootNotAllowed);
+				Err(Error::<T>::NotAllowed)?;
 			}
 
 			// Unreserve doesn't fail, unlike reserve
 			T::Currency::unreserve(&who, deposit);
 
 			TagMap::<T>::remove(tag_index);
+
+			// Emit the corresponding event.
+			Self::deposit_event(Event::TagDestroyed { index: tag_index, who });
+
 			Ok(())
 		}
 	}
