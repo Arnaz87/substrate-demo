@@ -65,8 +65,11 @@ pub use weights::*;
 pub mod pallet {
 	// Import various useful types required by all FRAME pallets.
 	use super::*;
-	use frame_support::pallet_prelude::*;
+	use frame_support::{pallet_prelude::*, traits::{Currency, ReservableCurrency}};
 	use frame_system::pallet_prelude::*;
+
+	type BalanceOf<T> =
+		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
 	// The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
 	// (`Call`s) in this pallet.
@@ -84,6 +87,16 @@ pub mod pallet {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// A type representing the weights required by the dispatchables of this pallet.
 		type WeightInfo: WeightInfo;
+		/// The currency trait
+		type Currency: ReservableCurrency<Self::AccountId>;
+
+		/// The maximum length of data stored on-chain.
+		#[pallet::constant]
+		type TagNameLimit: Get<u32>;
+
+		/// The deposit necessary to create a tag
+		#[pallet::constant]
+		type TagDepositAmount: Get<BalanceOf<Self>>;
 	}
 
 	/// A storage item for this pallet.
@@ -91,13 +104,23 @@ pub mod pallet {
 	/// In this template, we are declaring a storage item called `Something` that stores a single
 	/// `u32` value. Learn more about runtime storage here: <https://docs.substrate.io/build/runtime-storage/>
 	#[pallet::storage]
-	pub type Something<T> = StorageValue<_, u32>;
+	pub type TagIndex<T> = StorageValue<_, u64>;
 
+	/// Tags stored in the network
 	#[pallet::storage]
-	pub type TagMap<T> = StorageMap<
+	#[pallet::getter(fn tag_info)]
+	pub type TagMap<T: Config> = StorageMap<
 		Hasher = Blake2_128Concat,
-		Key = u8,
-		Value = u8,
+		Key = u64,
+		Value = (
+			BoundedVec<u8, T::TagNameLimit>, // name
+
+			// ??? AccountId doesn't implement Default, and it cannot used for storage...
+			// I wrap it around an Option so that I can say it has a default.
+			// idk why Default is needed for this, and idk why other examples just use T::AccountId and it works for them
+			Option<T::AccountId>, // creator
+			BalanceOf<T>, // deposit
+		),
 		QueryKind = ValueQuery
 	>;
 
@@ -161,51 +184,66 @@ pub mod pallet {
 		/// error if it isn't. Learn more about origins here: <https://docs.substrate.io/build/origins/>
 		#[pallet::call_index(0)]
 		#[pallet::weight(T::WeightInfo::do_something())]
-		pub fn create_tag(origin: OriginFor<T>, something: u32) -> DispatchResult {
+		pub fn create_tag(origin: OriginFor<T>, name: BoundedVec<u8, T::TagNameLimit>) -> DispatchResult {
 			// Check that the extrinsic was signed and get the signer.
 			let who = ensure_signed(origin)?;
 
-			// Update storage.
-			Something::<T>::put(something);
+			// Amount to deposit. Comes from configuration but it's good practice to store any amount
+			// reserved at any point.
+			let deposit = T::TagDepositAmount::get();
 
-			// Emit an event.
-			Self::deposit_event(Event::SomethingStored { something, who });
+			// Try reserving the amount. This function naturally fails if the account lacks funds.
+			T::Currency::reserve(&who, deposit)?;
+
+			// By this point all checks should have been done (enough balance, no duplication, etc)
+
+			// Get the next available index and update the counter
+			let index = match TagIndex::<T>::get() {
+				// Return an error if the value has not been set.
+				None => {
+					let new_index = 1;
+					TagIndex::<T>::put(new_index);
+					new_index
+				},
+				Some(last_index) => {
+					// Increment the value read from storage. This will cause an error in the event
+					// of overflow.
+					let new_index = last_index.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
+					// Update the value in storage with the incremented result.
+					TagIndex::<T>::put(new_index);
+					last_index
+				},
+			};
+
+			TagMap::<T>::insert(index, (name, Some(who), deposit));
 
 			// Return a successful `DispatchResult`
 			Ok(())
 		}
 
-		/// An example dispatchable that may throw a custom error.
-		///
-		/// It checks that the caller is a signed origin and reads the current value from the
-		/// `Something` storage item. If a current value exists, it is incremented by 1 and then
-		/// written back to storage.
-		///
-		/// ## Errors
-		///
-		/// The function will return an error under the following conditions:
-		///
-		/// - If no value has been set ([`Error::NoneValue`])
-		/// - If incrementing the value in storage causes an arithmetic overflow
-		///   ([`Error::StorageOverflow`])
+		/// Destroys a tag from the chain
 		#[pallet::call_index(1)]
 		#[pallet::weight(T::WeightInfo::cause_error())]
-		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
+		pub fn destroy_tag(origin: OriginFor<T>, tag_index: u64) -> DispatchResult {
+			// TODO: I'm not familiar with the transactionality guarantees that apply here.
+			// If this were multithreaded, and multiple calls were executed at the same time,
+			// an account could remove from its reserve multiple times for destroying a single tag.
 
-			// Read a value from storage.
-			match Something::<T>::get() {
-				// Return an error if the value has not been set.
-				None => Err(Error::<T>::NoneValue.into()),
-				Some(old) => {
-					// Increment the value read from storage. This will cause an error in the event
-					// of overflow.
-					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-					// Update the value in storage with the incremented result.
-					Something::<T>::put(new);
-					Ok(())
-				},
+			// Check that the extrinsic was signed and get the signer.
+			let who = ensure_signed(origin)?;
+
+			let (_name, creator_opt, deposit) = TagMap::<T>::try_get(tag_index)?;
+
+			if creator_opt.as_ref() != Some(&who) {
+				// TODO: Is this the correct error?
+				return Err(DispatchError::RootNotAllowed);
 			}
+
+			// Unreserve doesn't fail, unlike reserve
+			T::Currency::unreserve(&who, deposit);
+
+			TagMap::<T>::remove(tag_index);
+			Ok(())
 		}
 	}
 }

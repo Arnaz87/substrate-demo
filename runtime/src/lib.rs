@@ -123,6 +123,10 @@ pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
 
+pub const MILLICENTS: Balance = 1_000_000_000;
+pub const CENTS: Balance = 1_000 * MILLICENTS;
+pub const DOLLARS: Balance = 100 * CENTS;
+
 /// The version information used to identify this runtime when compiled natively.
 #[cfg(feature = "std")]
 pub fn native_version() -> NativeVersion {
@@ -245,10 +249,19 @@ impl pallet_sudo::Config for Runtime {
 	type WeightInfo = pallet_sudo::weights::SubstrateWeight<Runtime>;
 }
 
+parameter_types! {
+	pub const TagNameLimit: u32 = 256;
+	pub const TagDepositAmount: Balance = 1 * CENTS;
+}
+
 /// Configure the pallet-template in pallets/template.
 impl pallet_tags::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = pallet_tags::weights::SubstrateWeight<Runtime>;
+	type Currency = Balances;
+
+	type TagNameLimit = TagNameLimit;
+	type TagDepositAmount = TagDepositAmount;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
