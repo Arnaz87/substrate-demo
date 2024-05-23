@@ -216,7 +216,7 @@ pub mod pallet {
 				// Return an error if the value has not been set.
 				None => {
 					let new_index = 1;
-					TagIndex::<T>::put(new_index);
+					TagIndex::<T>::put(new_index + 1);
 					new_index
 				},
 				Some(last_index) => {
