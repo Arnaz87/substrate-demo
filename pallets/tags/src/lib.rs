@@ -1,40 +1,9 @@
-//! # Template Pallet
+//! # Tags Pallet
 //!
-//! A pallet with minimal functionality to help developers understand the essential components of
-//! writing a FRAME pallet. It is typically used in beginner tutorials or in Substrate template
-//! nodes as a starting point for creating a new pallet and **not meant to be used in production**.
+//! This pallet implements a basic tag system, where accounts reserve some amount of their funds
+//! for the creation of a tag, that has an associated name.
 //!
-//! ## Overview
-//!
-//! This template pallet contains basic examples of:
-//! - declaring a storage item that stores a single `u32` value
-//! - declaring and using events
-//! - declaring and using errors
-//! - a dispatchable function that allows a user to set a new value to storage and emits an event
-//!   upon success
-//! - another dispatchable function that causes a custom error to be thrown
-//!
-//! Each pallet section is annotated with an attribute using the `#[pallet::...]` procedural macro.
-//! This macro generates the necessary code for a pallet to be aggregated into a FRAME runtime.
-//!
-//! Learn more about FRAME macros [here](https://docs.substrate.io/reference/frame-macros/).
-//!
-//! ### Pallet Sections
-//!
-//! The pallet sections in this template are:
-//!
-//! - A **configuration trait** that defines the types and parameters which the pallet depends on
-//!   (denoted by the `#[pallet::config]` attribute). See: [`Config`].
-//! - A **means to store pallet-specific data** (denoted by the `#[pallet::storage]` attribute).
-//!   See: [`storage_types`].
-//! - A **declaration of the events** this pallet emits (denoted by the `#[pallet::event]`
-//!   attribute). See: [`Event`].
-//! - A **declaration of the errors** that this pallet can throw (denoted by the `#[pallet::error]`
-//!   attribute). See: [`Error`].
-//! - A **set of dispatchable functions** that define the pallet's functionality (denoted by the
-//!   `#[pallet::call]` attribute). See: [`dispatchables`].
-//!
-//! Run `cargo doc --package pallet-template --open` to view this pallet's documentation.
+//! This pallet is intended to be used along with nfts, but the support is not yet implemented.
 
 // We make sure this pallet uses `no_std` for compiling to Wasm.
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -77,10 +46,6 @@ pub mod pallet {
 	pub struct Pallet<T>(_);
 
 	/// The pallet's configuration trait.
-	///
-	/// All our types and constants a pallet depends on must be declared here.
-	/// These types are defined generically and made concrete when the pallet is declared in the
-	/// `runtime/src/lib.rs` file of your chain.
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		/// The overarching runtime event type.
@@ -99,10 +64,7 @@ pub mod pallet {
 		type TagDepositAmount: Get<BalanceOf<Self>>;
 	}
 
-	/// A storage item for this pallet.
-	///
-	/// In this template, we are declaring a storage item called `Something` that stores a single
-	/// `u32` value. Learn more about runtime storage here: <https://docs.substrate.io/build/runtime-storage/>
+	/// Counter of the next available index for a tag
 	#[pallet::storage]
 	pub type TagIndex<T> = StorageValue<_, u64>;
 
@@ -114,27 +76,14 @@ pub mod pallet {
 		Key = u64,
 		Value = (
 			BoundedVec<u8, T::TagNameLimit>, // name
-
-			// ??? AccountId doesn't implement Default, and it cannot used for storage...
-			// I wrap it around an Option so that I can say it has a default.
-			// idk why Default is needed for this, and idk why other examples just use T::AccountId and it works for them
-			Option<T::AccountId>, // creator
+			T::AccountId, // creator
 			BalanceOf<T>, // deposit
 		),
-		QueryKind = ValueQuery
+		QueryKind = OptionQuery
 	>;
 
 
 	/// Events that functions in this pallet can emit.
-	///
-	/// Events are a simple means of indicating to the outside world (such as dApps, chain explorers
-	/// or other users) that some notable update in the runtime has occurred. In a FRAME pallet, the
-	/// documentation for each event field and its parameters is added to a node's metadata so it
-	/// can be used by external interfaces or tools.
-	///
-	///	The `generate_deposit` macro generates a function on `Pallet` called `deposit_event` which
-	/// will convert the event type of your pallet into `RuntimeEvent` (declared in the pallet's
-	/// [`Config`] trait) and deposit it using [`frame_system::Pallet::deposit_event`].
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
@@ -157,13 +106,6 @@ pub mod pallet {
 	}
 
 	/// Errors that can be returned by this pallet.
-	///
-	/// Errors tell users that something went wrong so it's important that their naming is
-	/// informative. Similar to events, error documentation is added to a node's metadata so it's
-	/// equally important that they have helpful documentation associated with them.
-	///
-	/// This type of runtime error can be up to 4 bytes in size should you want to return additional
-	/// information.
 	#[pallet::error]
 	pub enum Error<T> {
 		/// The value retrieved was `None` as no value was previously set.
@@ -176,25 +118,10 @@ pub mod pallet {
 		NotAllowed,
 	}
 
-	/// The pallet's dispatchable functions ([`Call`]s).
-	///
-	/// Dispatchable functions allows users to interact with the pallet and invoke state changes.
-	/// These functions materialize as "extrinsics", which are often compared to transactions.
-	/// They must always return a `DispatchResult` and be annotated with a weight and call index.
-	///
-	/// The [`call_index`] macro is used to explicitly
-	/// define an index for calls in the [`Call`] enum. This is useful for pallets that may
-	/// introduce new dispatchables over time. If the order of a dispatchable changes, its index
-	/// will also change which will break backwards compatibility.
-	///
-	/// The [`weight`] macro is used to assign a weight to each call.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// An example dispatchable that takes a single u32 value as a parameter, writes the value
-		/// to storage and emits an event.
-		///
-		/// It checks that the _origin_ for this call is _Signed_ and returns a dispatch
-		/// error if it isn't. Learn more about origins here: <https://docs.substrate.io/build/origins/>
+		/// Creates a tag with a name.
+		/// Tags are stored in TagMap, they contain a name, the creator, and the deposit reserved for them.
 		#[pallet::call_index(0)]
 		#[pallet::weight(T::WeightInfo::do_something())]
 		pub fn create_tag(origin: OriginFor<T>, name: BoundedVec<u8, T::TagNameLimit>) -> DispatchResult {
@@ -207,9 +134,6 @@ pub mod pallet {
 
 			// Try reserving the amount. This function naturally fails if the account lacks funds.
 			T::Currency::reserve(&who, deposit)?;
-
-			// By this point all checks should have been done (enough balance, no duplication, etc)
-			// TODO: There's a check still missing atp: whether there's space for more tags.
 
 			// Get the next available index and update the counter
 			let index = match TagIndex::<T>::get() {
@@ -229,7 +153,7 @@ pub mod pallet {
 				},
 			};
 
-			TagMap::<T>::insert(index, (name, Some(who.clone()), deposit));
+			TagMap::<T>::insert(index, (name, who.clone(), deposit));
 
 			// Emit the corresponding event.
 			Self::deposit_event(Event::TagCreated {
@@ -244,16 +168,12 @@ pub mod pallet {
 		#[pallet::call_index(1)]
 		#[pallet::weight(T::WeightInfo::cause_error())]
 		pub fn destroy_tag(origin: OriginFor<T>, tag_index: u64) -> DispatchResult {
-			// TODO: I'm not familiar with the transactionality guarantees that apply here.
-			// If this were multithreaded, and multiple calls were executed at the same time,
-			// an account could remove from its reserve multiple times for destroying a single tag.
-
 			// Check that the extrinsic was signed and get the signer.
 			let who = ensure_signed(origin)?;
 
-			let (_name, creator_opt, deposit) = TagMap::<T>::try_get(tag_index).map_err(|()|Error::<T>::InvalidTag)?;
+			let (_name, creator, deposit) = TagMap::<T>::try_get(tag_index).map_err(|()|Error::<T>::InvalidTag)?;
 
-			if creator_opt.as_ref() != Some(&who) {
+			if who != creator {
 				Err(Error::<T>::NotAllowed)?;
 			}
 
