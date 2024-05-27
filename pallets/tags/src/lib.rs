@@ -66,7 +66,7 @@ pub mod pallet {
 
 	/// Counter of the next available index for a tag
 	#[pallet::storage]
-	pub type TagIndex<T> = StorageValue<_, u64>;
+	pub type TagIndex<T> = StorageValue<_, u64, ValueQuery>;
 
 	/// Tags stored in the network
 	#[pallet::storage]
@@ -136,22 +136,13 @@ pub mod pallet {
 			T::Currency::reserve(&who, deposit)?;
 
 			// Get the next available index and update the counter
-			let index = match TagIndex::<T>::get() {
-				// Return an error if the value has not been set.
-				None => {
-					let new_index = 1;
-					TagIndex::<T>::put(new_index + 1);
-					new_index
-				},
-				Some(last_index) => {
-					// Increment the value read from storage. This will cause an error in the event
-					// of overflow.
-					let new_index = last_index.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-					// Update the value in storage with the incremented result.
-					TagIndex::<T>::put(new_index);
-					last_index
-				},
-			};
+			let index = TagIndex::<T>::get();
+
+			// Increment the tag index. This will cause an error in the event
+			// of overflow.
+			TagIndex::<T>::put(
+				index.checked_add(1).ok_or(Error::<T>::StorageOverflow)?
+			);
 
 			TagMap::<T>::insert(index, (name, who.clone(), deposit));
 

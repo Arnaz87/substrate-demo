@@ -1,5 +1,5 @@
 use crate::{mock::*, Error, Event, TagIndex, TagMap};
-use frame_support::{assert_ok, assert_err, traits::Currency};
+use frame_support::{assert_ok, assert_noop, traits::Currency};
 use sp_core::bounded::BoundedVec;
 
 macro_rules! bvec {
@@ -15,8 +15,8 @@ fn create_and_destroy_tag() {
 		System::set_block_number(1);
 
 		// Should be the first index
-		let tag_index = TagIndex::<Test>::get().unwrap_or(1);
-		assert_eq!(tag_index, 1);
+		let tag_index = TagIndex::<Test>::get();
+		assert_eq!(tag_index, 0);
 
 		// Give some amount to the account so the test can run
 		Balances::make_free_balance_be(&1, 100);
@@ -36,7 +36,7 @@ fn create_and_destroy_tag() {
 		System::assert_last_event(Event::TagCreated { index: tag_index, who: 1, deposit }.into());
 
 		// Assert the index advanced
-		assert_eq!(TagIndex::<Test>::get(), Some(tag_index + 1));
+		assert_eq!(TagIndex::<Test>::get(), tag_index + 1);
 
 		// Invoke the destroy extrinsic
 		assert_ok!(TagModule::destroy_tag(RuntimeOrigin::signed(1), tag_index));
@@ -48,7 +48,7 @@ fn create_and_destroy_tag() {
 }
 
 #[test]
-fn destroy_tag() {
+fn destroy_tag_by_owner() {
 	new_test_ext().execute_with(|| {
 		// Go past genesis block so events get deposited
 		System::set_block_number(1);
@@ -59,14 +59,14 @@ fn destroy_tag() {
 
 		let name = bvec![65, 66, 67];
 		let deposit = TagDepositAmount::get();
-		let tag_index = 1;
+		let tag_index = 0;
 
 		// Create tag
 		assert_ok!(TagModule::create_tag(RuntimeOrigin::signed(1), name.clone()));
 		System::assert_last_event(Event::TagCreated { index: tag_index, who: 1, deposit }.into());
 
 		// Try to destroy with another user
-		assert_err!(TagModule::destroy_tag(RuntimeOrigin::signed(2), tag_index), Error::<Test>::NotAllowed);
+		assert_noop!(TagModule::destroy_tag(RuntimeOrigin::signed(2), tag_index), Error::<Test>::NotAllowed);
 
 		// Correctly destroy with the original creator of the tag
 		assert_ok!(TagModule::destroy_tag(RuntimeOrigin::signed(1), tag_index));
@@ -74,5 +74,21 @@ fn destroy_tag() {
 		// Ensure the storage was modified and the event was emitted
 		assert_eq!(TagMap::<Test>::try_get(tag_index), Err(()));
 		System::assert_last_event(Event::TagDestroyed { index: tag_index, who: 1 }.into());
+	});
+}
+
+#[test]
+fn destroy_invalid_tag() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Give some amount to the accounts so the test can run
+		Balances::make_free_balance_be(&1, 100);
+
+		let tag_index = 1;
+
+		// Try to destroy a tag that has never been created
+		assert_noop!(TagModule::destroy_tag(RuntimeOrigin::signed(1), tag_index), Error::<Test>::InvalidTag);
 	});
 }
