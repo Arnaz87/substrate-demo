@@ -123,7 +123,7 @@ pub mod pallet {
 		/// Creates a tag with a name.
 		/// Tags are stored in TagMap, they contain a name, the creator, and the deposit reserved for them.
 		#[pallet::call_index(0)]
-		#[pallet::weight(T::WeightInfo::do_something())]
+		#[pallet::weight(T::WeightInfo::create_tag())]
 		pub fn create_tag(origin: OriginFor<T>, name: BoundedVec<u8, T::TagNameLimit>) -> DispatchResult {
 			// Check that the extrinsic was signed and get the signer.
 			let who = ensure_signed(origin)?;
@@ -157,7 +157,7 @@ pub mod pallet {
 
 		/// Destroys a tag from the chain
 		#[pallet::call_index(1)]
-		#[pallet::weight(T::WeightInfo::cause_error())]
+		#[pallet::weight(T::WeightInfo::destroy_tag())]
 		pub fn destroy_tag(origin: OriginFor<T>, tag_index: u64) -> DispatchResult {
 			// Check that the extrinsic was signed and get the signer.
 			let who = ensure_signed(origin)?;

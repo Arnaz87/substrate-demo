@@ -3,12 +3,10 @@
 use super::*;
 
 #[allow(unused)]
-use crate::Pallet as Template;
+use crate::Pallet as Tags;
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
-use frame_support::traits::Get;
-use sp_core::bounded::BoundedVec;
-use sp_std::vec::vec;
+use frame_support::traits::{Get, Currency};
 
 macro_rules! bvec {
 	($( $x:tt )*) => {
@@ -20,6 +18,9 @@ macro_rules! bvec {
 mod benchmarks {
 	use super::*;
 
+	use sp_core::bounded::BoundedVec;
+	use sp_std::vec;
+
 	#[benchmark]
 	fn create_tag() {
 		let caller: T::AccountId = whitelisted_caller();
@@ -27,11 +28,13 @@ mod benchmarks {
 		let deposit = T::TagDepositAmount::get();
 		let name = bvec![];
 
+		T::Currency::make_free_balance_be(&caller, deposit + deposit);
+
 		#[extrinsic_call]
-		create_tag(RawOrigin::Signed(caller), name.clone());
+		_(RawOrigin::Signed(caller.clone()), name.clone());
 
 		assert_eq!(TagMap::<T>::try_get(tag_index), Ok(
-			(name.clone(), 1, deposit)
+			(name.clone(), caller, deposit)
 		));
 	}
 
@@ -42,13 +45,15 @@ mod benchmarks {
 		let deposit = T::TagDepositAmount::get();
 		let name = bvec![];
 
-		create_tag(RawOrigin::Signed(caller), name.clone());
-		assert_eq!(TagMap::<T>::get(tag_index), Some(
-			(name.clone(), 1, deposit)
+		T::Currency::make_free_balance_be(&caller, deposit + deposit);
+
+		Tags::<T>::create_tag(RawOrigin::Signed(caller.clone()).into(), name.clone()).unwrap();
+		assert_eq!(TagMap::<T>::try_get(tag_index), Ok(
+			(name.clone(), caller.clone(), deposit)
 		));
 
 		#[extrinsic_call]
-		destroy_tag(RawOrigin::Signed(caller), tag_index);
+		_(RawOrigin::Signed(caller), tag_index);
 
 		assert_eq!(TagMap::<T>::get(tag_index), None);
 	}
